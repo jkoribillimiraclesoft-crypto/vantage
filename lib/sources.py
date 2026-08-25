@@ -34,9 +34,13 @@ def fetch_rss(source_cfg):
     if feedparser is None:
         return [], "feedparser not installed"
     try:
-        resp = requests.get(source_cfg["url"], headers=HEADERS, timeout=TIMEOUT)
-        resp.raise_for_status()
-        parsed = feedparser.parse(resp.content)
+        # Let feedparser fetch the URL itself rather than pre-fetching with
+        # requests — its own HTTP layer handles gzip/redirects/encoding
+        # detection more robustly, which fixes spurious "parse errors" on
+        # feeds that are actually valid but oddly served.
+        parsed = feedparser.parse(source_cfg["url"], request_headers=HEADERS)
+        if getattr(parsed, "status", 200) and parsed.status >= 400:
+            return [], f"HTTP {parsed.status}"
         if parsed.bozo and not parsed.entries:
             return [], f"could not parse feed ({parsed.bozo_exception})"
         items = []
